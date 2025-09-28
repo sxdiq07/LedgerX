@@ -1,10 +1,7 @@
-streamlit
+﻿streamlit
 pandas
 duckdb
 faker
 plotly
 scikit-learn
 joblib
-lightgbm
-shap
-tensorflow-cpu==2.12.0
