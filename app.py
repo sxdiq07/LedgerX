@@ -1,11 +1,5 @@
 """
-app.py — LedgerX Streamlit Dashboard
-- Sidebar filters
-- KPIs header
-- Interactive charts (Plotly)
-- Validation failures + CSV download
-- ML-flagged transactions
-- Ad-hoc SQL
+LedgerX — Financial Compliance Analytics Dashboard
 """
 
 import streamlit as st
@@ -13,6 +7,7 @@ import duckdb
 import pandas as pd
 import plotly.express as px
 import json
+import os
 from datetime import datetime, timedelta
 
 DB_PATH = "data/transactions.duckdb"
@@ -194,29 +189,44 @@ else:
 st.markdown("---")
 
 # -----------------------
-# ML-flagged Transactions
+# ML-flagged Transactions (with CSV fallback)
 # -----------------------
 st.subheader("ML-flagged Transactions (model output)")
+
+ml_df = None
 try:
     con = get_conn()
-    ml_df = con.execute("SELECT * FROM ml_results WHERE ml_flag=1 ORDER BY ml_score DESC LIMIT 200").df()
+    ml_df = con.execute("SELECT * FROM ml_results ORDER BY ml_score DESC LIMIT 200").df()
     con.close()
-    if ml_df.empty:
-        st.info("No ML results yet. Run model_inference.py to generate ml_results.")
-    else:
-        def explain_to_str(js):
-            try:
-                arr = json.loads(js)
-                return "; ".join([f"{f}:{v:.3f}" for f,v in arr])
-            except:
-                return ""
+except Exception:
+    csv_path = "data/ml_results.csv"
+    if os.path.exists(csv_path):
+        ml_df = pd.read_csv(csv_path)
+
+if ml_df is None or ml_df.empty:
+    st.info("No ML results found. Run model_inference.py locally to generate ml_results, "
+            "or provide data/ml_results.csv for cloud demo.")
+else:
+    def explain_to_str(js):
+        try:
+            arr = json.loads(js)
+            return "; ".join([f"{f}:{v:.3f}" for f, v in arr])
+        except:
+            return ""
+    if 'explain_top' in ml_df.columns:
         ml_df['explain'] = ml_df['explain_top'].apply(explain_to_str)
-        st.dataframe(
-            ml_df[['txn_id','customer_id','amount','ml_score','explain']].sort_values('ml_score', ascending=False).head(200)
-        )
-        st.download_button("Download ML flagged CSV", ml_df.to_csv(index=False).encode('utf-8'), file_name="ml_flagged.csv")
-except Exception as e:
-    st.info("ML results not found or error: " + str(e))
+
+    st.dataframe(
+        ml_df[['txn_id', 'customer_id', 'amount', 'ml_score', 'explain']]
+        .sort_values('ml_score', ascending=False)
+        .head(200)
+    )
+
+    st.download_button(
+        "Download ML flagged CSV",
+        ml_df.to_csv(index=False).encode('utf-8'),
+        file_name="ml_flagged.csv"
+    )
 
 st.markdown("---")
 
@@ -224,7 +234,8 @@ st.markdown("---")
 # Ad-hoc SQL
 # -----------------------
 st.subheader("Run ad-hoc SQL")
-sql = st.text_area("Write a SQL query against the DuckDB database (tables: staging_txns, reporting_txns, validation_failures, v_daily_summary, ml_results)", height=180)
+sql = st.text_area("Write a SQL query against the DuckDB database "
+                   "(tables: staging_txns, reporting_txns, validation_failures, v_daily_summary, ml_results)", height=180)
 if st.button("Run SQL"):
     if not sql.strip():
         st.warning("Please enter a SQL query.")
