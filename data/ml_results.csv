@@ -1,0 +1,12 @@
+python - <<'PY'
+import duckdb, pandas as pd
+con = duckdb.connect('data/transactions.duckdb')
+try:
+    df = con.execute("SELECT * FROM ml_results").df()
+    df.to_csv('data/ml_results.csv', index=False)
+    print("Wrote data/ml_results.csv", len(df))
+except Exception as e:
+    print("Could not export ml_results:", e)
+finally:
+    con.close()
+PY
